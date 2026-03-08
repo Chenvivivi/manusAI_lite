@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown 渲染测试</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+</head>
+<body>
+    <div id="app" style="padding: 40px; max-width: 800px; margin: 0 auto;">
+        <h1 style="color: white; margin-bottom: 30px;">Markdown 渲染测试</h1>
+        
+        <div class="message ai" style="max-width: 100%;">
+            <div class="message-content">
+                <!-- 思考过程 -->
+                <div class="reasoning-section">
+                    <div class="reasoning-header" @click="showReasoning = !showReasoning">
+                        <span class="reasoning-icon">🤔</span>
+                        <span class="reasoning-title">思考过程</span>
+                        <span class="reasoning-toggle">{{ showReasoning ? '▼' : '▶' }}</span>
+                    </div>
+                    <div v-show="showReasoning" class="reasoning-content" v-html="reasoningHtml"></div>
+                </div>
+                
+                <!-- 消息内容 -->
+                <div class="message-text" v-html="contentHtml"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    showReasoning: false,
+                    reasoning: `用户询问 RAG 是什么。这是一个技术问题，需要清晰地解释概念、工作原理和应用场景。
+
+我应该：
+1. 先给出定义
+2. 解释工作流程
+3. 说明优势和应用场景`,
+                    content: `好的，让我详细解释一下 **RAG**。
+
+## 什么是 RAG？
+
+RAG 是 **检索增强生成**（Retrieval-Augmented Generation）的缩写，是一种结合了信息检索和大语言模型生成能力的技术框架。
+
+### 核心思想
+
+在生成回答时，模型不仅依赖自身的参数知识，还会：
+1. **检索**相关的外部文档
+2. **增强**上下文信息
+3. **生成**更准确的回答
+
+## 工作流程
+
+\`\`\`python
+# RAG 基本流程示例
+def rag_pipeline(query):
+    # 1. 检索相关文档
+    docs = retrieve(query, knowledge_base)
+    
+    # 2. 构建增强提示
+    context = build_context(docs)
+    prompt = f"{context}\\n\\n问题：{query}"
+    
+    # 3. 生成回答
+    response = llm.generate(prompt)
+    return response
+\`\`\`
+
+## 主要优势
+
+- **知识实时性**：可以随时更新知识库
+- **减少幻觉**：基于真实文档生成
+- **可追溯性**：回答可以关联到具体来源
+- **成本效益**：无需重新训练模型
+
+## 应用场景
+
+1. 智能客服系统
+2. 企业知识管理
+3. 学术研究助手
+4. 代码文档查询
+
+希望这个解释对你有帮助！`
+                };
+            },
+            computed: {
+                reasoningHtml() {
+                    return this.renderMarkdown(this.reasoning);
+                },
+                contentHtml() {
+                    return this.renderMarkdown(this.content);
+                }
+            },
+            methods: {
+                renderMarkdown(text) {
+                    if (!text) return '';
+                    
+                    marked.setOptions({
+                        highlight: function(code, lang) {
+                            if (lang && hljs.getLanguage(lang)) {
+                                try {
+                                    return hljs.highlight(code, { language: lang }).value;
+                                } catch (err) {}
+                            }
+                            return hljs.highlightAuto(code).value;
+                        },
+                        breaks: true,
+                        gfm: true
+                    });
+                    
+                    return marked.parse(text);
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

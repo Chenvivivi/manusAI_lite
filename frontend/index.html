@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ManusAI</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/marked-highlight@2.1.0/lib/index.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 左侧任务列表 -->
+        <aside class="task-sidebar" :class="{ collapsed: sidebarCollapsed }">
+            <button class="sidebar-toggle" @click="toggleSidebar">
+                <span v-if="!sidebarCollapsed">◀</span>
+                <span v-else>▶</span>
+            </button>
+            <div class="sidebar-header" v-show="!sidebarCollapsed">
+                <h2>任务列表</h2>
+                <button class="new-task-btn" @click="createNewTask">+ 新建任务</button>
+            </div>
+            <div class="task-list" v-show="!sidebarCollapsed">
+                <div 
+                    v-for="task in tasks" 
+                    :key="task.id"
+                    class="task-item"
+                    :class="{ active: task.id === currentTaskId }"
+                    @click="selectTask(task.id)"
+                >
+                    <div class="task-title">{{ task.title }}</div>
+                    <div class="task-time">{{ task.time }}</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 中间聊天区域 -->
+        <main class="chat-container">
+            <div class="chat-header">
+                <h1>ManusAI</h1>
+            </div>
+            
+            <div class="chat-messages" ref="chatMessages">
+                <div 
+                    v-for="message in currentMessages" 
+                    :key="message.id"
+                    class="message"
+                    :class="message.type"
+                >
+                    <div class="message-content">
+                        <!-- 加载状态 -->
+                        <div v-if="message.isLoading" class="loading-indicator">
+                            <span class="loading-text">规划中</span>
+                            <span class="loading-dots">
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                            </span>
+                        </div>
+                        
+                        <!-- 思考过程 -->
+                        <div v-if="!message.isLoading && message.reasoning" class="reasoning-section">
+                            <div class="reasoning-header" @click="toggleReasoning(message.id)">
+                                <span class="reasoning-icon">🤔</span>
+                                <span class="reasoning-title">思考过程</span>
+                                <span class="reasoning-toggle">{{ message.showReasoning ? '▼' : '▶' }}</span>
+                            </div>
+                            <div v-show="message.showReasoning" class="reasoning-content" v-html="renderMarkdown(message.reasoning)"></div>
+                        </div>
+                        
+                        <!-- 子任务规划（简化列表） -->
+                        <div v-if="!message.isLoading && message.subtasks && message.subtasks.length > 0" class="subtasks-section">
+                            <div class="subtasks-header" @click="toggleSubtasks(message.id)">
+                                <span class="subtasks-icon">📋</span>
+                                <span class="subtasks-title">
+                                    任务规划 ({{ getCompletedCount(message) }}/{{ message.subtasks.length }})
+                                </span>
+                                <span class="subtasks-toggle">{{ message.showSubtasks ? '▼' : '▶' }}</span>
+                            </div>
+                            <div v-show="message.showSubtasks" class="subtasks-list">
+                                <div v-for="subtask in message.subtasks" :key="subtask.id" class="subtask-simple-item">
+                                    <span class="subtask-check">
+                                        <span v-if="subtask.status === 'completed'" class="check-mark">✓</span>
+                                        <span v-else class="check-placeholder">○</span>
+                                    </span>
+                                    <span class="subtask-name">{{ subtask.description }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 消息内容 -->
+                        <div v-if="!message.isLoading && message.text" class="message-text" v-html="renderMarkdown(message.text)"></div>
+                        
+                        <!-- 文件列表 -->
+                        <div v-if="message.files && message.files.length > 0" class="message-files">
+                            <div 
+                                v-for="file in message.files" 
+                                :key="file.id"
+                                class="file-tag"
+                                @click="openFile(file)"
+                            >
+                                <span class="file-icon">📄</span>
+                                <span class="file-name">{{ file.name }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="message-actions">
+                        <button class="copy-btn" @click="copyMessage(message.text)" title="复制内容">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            <span class="copy-text">复制</span>
+                        </button>
+                        <div class="message-time">{{ message.time }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-area">
+                <div class="input-wrapper">
+                    <textarea 
+                        v-model="inputText"
+                        @keydown.enter.exact="handleEnter"
+                        placeholder="输入消息..."
+                        rows="1"
+                        ref="inputTextarea"
+                    ></textarea>
+                    <button 
+                        v-if="!isGenerating"
+                        class="send-btn"
+                        @click="sendMessage"
+                        :disabled="!inputText.trim()"
+                    >
+                        <span class="send-icon">➤</span>
+                    </button>
+                    <button 
+                        v-else
+                        class="stop-btn"
+                        @click="stopGenerating"
+                    >
+                        <span class="stop-icon">⬛</span>
+                        <span>停止</span>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- 右侧文件预览面板 -->
+        <div class="file-panel" :class="{ open: currentFile !== null }">
+            <div class="file-panel-header">
+                <h3>{{ currentFile ? currentFile.name : '' }}</h3>
+                <button class="close-btn" @click="closeFile">✕</button>
+            </div>
+            <div class="file-panel-content" v-if="currentFile">
+                <div v-html="renderMarkdown(currentFile.content)"></div>
+            </div>
+        </div>
+
+        <!-- 遮罩层 -->
+        <div 
+            class="overlay" 
+            :class="{ active: filePanel.isOpen }"
+            @click="closeFile"
+        ></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
